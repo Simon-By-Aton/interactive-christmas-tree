@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D 交互式粒子圣诞树</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+#canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+/* Video Input - Add transition for hiding */
+#video-input { 
+position: absolute; top: 10px; right: 10px; width: 160px; height: 120px; 
+transform: scaleX(-1); z-index: 2; border-radius: 8px; 
+border: 2px solid rgba(255,255,255,0.3); opacity: 0.7; 
+display: none; 
+transition: opacity 0.5s, transform 0.5s;
+}
+/* UI Panel - Minimalist Redesign */
+#ui-panel {
+position: absolute;
+top: 20px;
+left: 20px;
+width: 260px; /* Reduced width */
+background: rgba(10, 25, 40, 0.75); /* Darker, sleeker */
+backdrop-filter: blur(16px);
+-webkit-backdrop-filter: blur(16px);
+border-radius: 16px;
+border: 1px solid rgba(255,255,255,0.1);
+color: white;
+z-index: 10;
+transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+overflow: hidden;
+box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+/* Collapsed State - Floating Action Button style */
+#ui-panel.collapsed {
+width: 48px;
+height: 48px;
+padding: 0;
+border-radius: 50%;
+background: rgba(255, 255, 255, 0.1);
+border: 1px solid rgba(255, 255, 255, 0.2);
+cursor: pointer;
+animation: pulse-border 2s infinite;
+}
+/* Hidden Class for Fullscreen Mode */
+.ui-hidden {
+opacity: 0 !important;
+pointer-events: none !important;
+transform: translateY(-20px);
+}
+
+@keyframes pulse-border {
+0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.1); }
+70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+#ui-panel.collapsed .panel-content, 
+#ui-panel.collapsed .panel-title { 
+opacity: 0; 
+pointer-events: none; 
+display: none;
+}
+#ui-panel.collapsed .toggle-btn { 
+position: absolute;
+top: 50%; left: 50%;
+transform: translate(-50%, -50%) rotate(0deg); 
+margin: 0;
+width: 100%;
+height: 100%;
+display: flex;
+align-items: center;
+justify-content: center;
+color: rgba(255,255,255,0.8);
+}
+#ui-panel.collapsed:hover {
+transform: scale(1.1);
+background: rgba(255, 255, 255, 0.2);
+}
+
+.panel-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 12px 16px;
+border-bottom: 1px solid rgba(255,255,255,0.05);
+background: rgba(0,0,0,0.2);
+}
+.panel-title {
+font-size: 0.95rem;
+font-weight: 600;
+color: #fff;
+letter-spacing: 0.5px;
+}
+.panel-content {
+padding: 16px;
+transition: opacity 0.2s;
+}
+
+.toggle-btn {
+background: none;
+border: none;
+color: rgba(255,255,255,0.6);
+cursor: pointer;
+padding: 4px;
+transition: all 0.3s;
+display: flex;
+align-items: center; justify-content: center;
+border-radius: 50%;
+}
+.toggle-btn:hover { color: white; background: rgba(255,255,255,0.1); }
+
+.control-group { margin-bottom: 12px; }
+.control-group:last-child { margin-bottom: 0; }
+
+.control-label { 
+display: block; 
+font-size: 0.75rem; 
+color: rgba(255,255,255,0.5); 
+margin-bottom: 6px; 
+text-transform: uppercase;
+letter-spacing: 1px;
+}
+/* Compact File Input */
+.file-upload-btn {
+width: 100%;
+padding: 8px 0;
+background: rgba(255,255,255,0.1);
+border: 1px solid rgba(255,255,255,0.1);
+color: #ddd;
+border-radius: 8px;
+cursor: pointer;
+font-size: 0.85rem;
+transition: all 0.2s;
+text-align: center;
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 6px;
+}
+.file-upload-btn:hover { background: rgba(255,255,255,0.15); color: white; border-color: rgba(255,255,255,0.3); }
+input[type="file"] { display: none; }
+
+/* Minimal Status Grid */
+.status-grid {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 8px;
+}
+.status-item {
+background: rgba(0,0,0,0.3);
+padding: 8px;
+border-radius: 8px;
+text-align: center;
+}
+.status-key { font-size: 0.7rem; color: #888; display: block; margin-bottom: 2px;}
+.status-val { font-size: 0.8rem; color: #fff; font-family: monospace; font-weight: bold; }
+
+/* Fullscreen Restore Button */
+#restore-btn {
+position: absolute;
+bottom: 30px;
+right: 30px;
+width: 50px;
+height: 50px;
+background: rgba(255, 255, 255, 0.15);
+backdrop-filter: blur(10px);
+border: 1px solid rgba(255, 255, 255, 0.3);
+border-radius: 50%;
+cursor: pointer;
+z-index: 20;
+display: none; /* Hidden by default */
+align-items: center;
+justify-content: center;
+color: white;
+transition: all 0.3s;
+box-shadow: 0 0 20px rgba(0,0,0,0.3);
+}
+#restore-btn:hover {
+background: rgba(255, 255, 255, 0.3);
+transform: scale(1.1);
+}
+
+/* Start Overlay */
+#start-overlay {
+position: fixed;
+top: 0; left: 0; width: 100%; height: 100%;
+background: rgba(0,0,0,0.95);
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: center;
+z-index: 100;
+color: white;
+text-align: center;
+}
+.btn-start {
+margin-top: 20px;
+padding: 15px 40px;
+font-size: 1.2em;
+background: #00ff88;
+color: #000;
+border: none;
+border-radius: 30px;
+cursor: pointer;
+font-weight: bold;
+box-shadow: 0 0 20px rgba(0,255,136, 0.4);
+transition: transform 0.2s;
+}
+.btn-start:hover { transform: scale(1.05); }
+
+#loading { margin-top: 10px; font-size: 0.9em; color: #aaa; }
+.audio-toggle {
+display: flex;
+align-items: center;
+justify-content: space-between;
+background: rgba(0,0,0,0.3);
+padding: 6px 10px;
+border-radius: 8px;
+}
+.audio-toggle button {
+background: none; border: none; 
+color: #4ade80; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+transition: color 0.2s;
+}
+.audio-toggle button:hover { color: #86efac; }
+.audio-toggle.off button { color: #f87171; }
+.audio-toggle.off button:hover { color: #fca5a5; }
+
+.fullscreen-toggle {
+width: 100%;
+padding: 8px;
+margin-top: 10px;
+background: rgba(255,255,255,0.1);
+border: none;
+border-radius: 8px;
+color: #ddd;
+font-size: 0.85rem;
+cursor: pointer;
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 6px;
+transition: background 0.2s;
+}
+.fullscreen-toggle:hover { background: rgba(255,255,255,0.2); color: white; }
+
+/* Gesture Indicators */
+#gesture-feedback {
+position: absolute;
+bottom: 30px;
+left: 50%;
+transform: translateX(-50%);
+display: flex;
+gap: 20px;
+z-index: 5;
+pointer-events: none;
+width: 90%;
+justify-content: center;
+}
+.gesture-box {
+background: rgba(0,0,0,0.6);
+padding: 12px 24px;
+border-radius: 30px;
+color: #ccc;
+font-size: 0.95em;
+opacity: 0.6;
+transition: all 0.3s;
+border: 1px solid rgba(255,255,255,0.1);
+backdrop-filter: blur(4px);
+display: flex;
+align-items: center;
+gap: 10px;
+}
+.gesture-active {
+opacity: 1;
+background: rgba(0, 255, 136, 0.15);
+border: 1px solid #00ff88;
+box-shadow: 0 0 20px rgba(0,255,136,0.25);
+transform: translateY(-5px);
+color: white;
+font-weight: bold;
+}
+.gesture-icon { font-size: 1.5em; }
+
+</style>
+</head>
+<body>
+
+<!-- Start Screen -->
+<div id="start-overlay">
+<h1 class="text-5xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">🎄 交互式粒子圣诞树</h1>
+<div class="max-w-xl text-left text-gray-300 space-y-4 mb-8 bg-gray-900 p-8 rounded-2xl border border-gray-700 shadow-2xl">
+<h3 class="text-white font-bold text-xl mb-2 border-b border-gray-700 pb-2">👋 手势控制指南</h3>
+<!-- Instructions -->
+<div class="flex items-start gap-3">
+<span class="text-2xl">👉</span>
+<div>
+<p class="text-blue-400 font-bold text-lg">左手 (Left Hand)</p>
+<p class="text-sm text-gray-400">控制照片展示</p>
+<ul class="list-disc pl-5 mt-1 space-y-1">
+<li><b>食指+拇指捏合</b>: 抓取/切换照片</li>
+<li><b>松开</b>: 1.2秒后照片飞回树上</li>
+</ul>
+</div>
+</div>
+
+<div class="flex items-start gap-3 mt-4">
+<span class="text-2xl">👈</span>
+<div>
+<p class="text-green-400 font-bold text-lg">右手 (Right Hand)</p>
+<p class="text-sm text-gray-400">控制粒子形态</p>
+<ul class="list-disc pl-5 mt-1 space-y-1">
+<li><b>张开五指</b>: 粒子爆炸扩散至全屏</li>
+<li><b>握拳</b>: 粒子聚拢回圣诞树</li>
+</ul>
+</div>
+</div>
+</div>
+<button class="btn-start" id="btn-start" disabled>正在加载模型...</button>
+<div id="loading">正在初始化 MediaPipe Hands...</div>
+</div>
+
+<!-- UI Panel -->
+<div id="ui-panel">
+<div class="panel-header">
+<span class="panel-title">设置</span>
+<button class="toggle-btn" id="toggle-ui-btn" title="折叠/展开">
+<svg id="icon-chevron" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+<svg id="icon-settings" style="display:none;" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+</button>
+</div>
+<div class="panel-content">
+<div class="control-group">
+<span class="control-label">照片</span>
+<label class="file-upload-btn">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+<span>上传照片</span>
+<input type="file" id="image-upload" multiple accept="image/*">
+</label>
+<div id="upload-status" class="text-[10px] mt-1 text-gray-500 text-center">未选择</div>
+</div>
+
+<div class="control-group">
+<span class="control-label">音频响应</span>
+<div id="audio-toggle-wrapper" class="audio-toggle off">
+<span id="audio-status-text" class="text-xs text-gray-400">已关闭</span>
+<button id="toggle-audio">开启</button>
+</div>
+</div>
+
+<div class="control-group" style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05);">
+<span class="control-label">手势状态</span>
+<div class="status-grid">
+<div class="status-item">
+<span class="status-key">右手(照片)</span>
+<span id="lh-status" class="status-val">-</span>
+</div>
+<div class="status-item">
+<span class="status-key">左手(扩散)</span>
+<span id="rh-status" class="status-val">-</span>
+</div>
+</div>
+</div>
+
+<button id="btn-fullscreen" class="fullscreen-toggle">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+全屏沉浸模式
+</button>
+</div>
+</div>
+
+<!-- Restore Button (Hidden by default) -->
+<button id="restore-btn" title="退出全屏">
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
+</button>
+
+<!-- Gesture Feedback -->
+<div id="gesture-feedback">
+<!-- Swapped Feedback -->
+<div id="feedback-lh" class="gesture-box">
+<span class="gesture-icon">👌</span> 
+<div>
+<div class="font-bold">右手</div>
+<div class="text-xs">捏合查看照片</div>
+</div>
+</div>
+<div id="feedback-rh" class="gesture-box">
+<span class="gesture-icon">✋</span>
+<div>
+<div class="font-bold">左手</div>
+<div class="text-xs">张开扩散粒子</div>
+</div>
+</div>
+</div>
+
+<!-- 3D Canvas -->
+<div id="canvas-container"></div>
+<!-- Hidden Video for Computer Vision -->
+<video id="video-input" playsinline></video>
+
+<!-- Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<!-- GSAP for smooth animations -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+<script>
+/**
+* GLOBAL CONFIGURATION & STATE
+*/
+const CONFIG = {
+particleCount: 5000, 
+treeHeight: 60,
+treeRadius: 25,
+snowCount: 1200,
+greenPalette: [0x00ff00, 0x228B22, 0x32CD32], 
+ornamentPalette: [0xC0C0C0, 0xFF0000, 0xFFD700, 0xFFFF00, 0xFFFFFF],
+cameraZ: 100,
+expansionFactor: 8.0 
+};
+
+const STATE = {
+isExploded: false, // Hand Open
+isPinching: false, // Hand Pinch
+wasPinching: false,
+currentPhotoIndex: -1,
+photoReturnTimer: null,
+audioEnabled: false,
+audioLevel: 0,
+currentExpansion: 1.0, // Track for star/text follow
+photos: [],
+originalPhotoPositions: []
+};
+
+let scene, camera, renderer, clock;
+let treeGroup, treeParticles;
+let snowSystem;
+let starMesh, textSprite;
+let audioContext, analyser, dataArray;
+let textMaterial; // Store to update shader uniform
+// MediaPipe stuff
+let hands, cameraUtils;
+const videoElement = document.getElementById('video-input');
+
+// DOM Elements
+const btnStart = document.getElementById('btn-start');
+const loadingText = document.getElementById('loading');
+// NOTE: lhStatus now visually represents Right Hand in UI, rhStatus represents Left Hand
+const lhStatus = document.getElementById('lh-status'); 
+const rhStatus = document.getElementById('rh-status');
+const feedbackLh = document.getElementById('feedback-lh');
+const feedbackRh = document.getElementById('feedback-rh');
+const uiPanel = document.getElementById('ui-panel');
+const toggleBtn = document.getElementById('toggle-ui-btn');
+const iconChevron = document.getElementById('icon-chevron');
+const iconSettings = document.getElementById('icon-settings');
+const btnFullscreen = document.getElementById('btn-fullscreen');
+const btnRestore = document.getElementById('restore-btn');
+
+/**
+* INITIALIZATION
+*/
+async function init() {
+// Scene Setup
+scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x000510, 0.008);
+
+camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 10, CONFIG.cameraZ);
+camera.lookAt(0, 10, 0);
+
+renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+clock = new THREE.Clock();
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+const pointLight = new THREE.PointLight(0xffaa00, 1, 100);
+pointLight.position.set(10, 50, 10);
+scene.add(pointLight);
+
+// Create Objects
+createTreeParticles();
+createStar();
+createSnow();
+
+// Event Listeners
+window.addEventListener('resize', onWindowResize);
+document.getElementById('image-upload').addEventListener('change', handleImageUpload);
+document.getElementById('toggle-audio').addEventListener('click', toggleAudio);
+// Fullscreen Handlers
+btnFullscreen.addEventListener('click', enterFullscreen);
+btnRestore.addEventListener('click', exitFullscreen);
+
+// Settings Toggle
+toggleBtn.addEventListener('click', (e) => {
+const isCollapsed = uiPanel.classList.toggle('collapsed');
+if (isCollapsed) {
+iconChevron.style.display = 'none';
+iconSettings.style.display = 'block';
+} else {
+iconChevron.style.display = 'block';
+iconSettings.style.display = 'none';
+}
+});
+uiPanel.addEventListener('click', (e) => {
+if (uiPanel.classList.contains('collapsed') && e.target !== toggleBtn && !toggleBtn.contains(e.target)) {
+uiPanel.classList.remove('collapsed');
+iconChevron.style.display = 'block';
+iconSettings.style.display = 'none';
+}
+});
+
+// Animation Loop
+animate();
+
+// Init MediaPipe
+initMediaPipe();
+}
+
+// Fullscreen Logic
+function enterFullscreen() {
+// Try to use browser fullscreen API, but handle failures gracefully
+if (document.documentElement.requestFullscreen) {
+document.documentElement.requestFullscreen().catch(err => {
+console.warn("Fullscreen API not allowed or failed:", err);
+// We continue to hide UI elements anyway to provide "Immersive Mode"
+});
+}
+uiPanel.classList.add('ui-hidden');
+videoElement.classList.add('ui-hidden');
+btnRestore.style.display = 'flex';
+}
+
+function exitFullscreen() {
+if (document.exitFullscreen && document.fullscreenElement) {
+document.exitFullscreen().catch(err => console.warn("Exit fullscreen failed:", err));
+}
+uiPanel.classList.remove('ui-hidden');
+videoElement.classList.remove('ui-hidden');
+btnRestore.style.display = 'none';
+}
+
+/**
+* 3D OBJECT CREATION
+*/
+function createTreeParticles() {
+treeGroup = new THREE.Group();
+scene.add(treeGroup);
+
+const geometry = new THREE.BufferGeometry();
+const positions = [];
+const colors = [];
+const sizes = [];
+const originalPositions = [];
+
+const colorHelper = new THREE.Color();
+
+for (let i = 0; i < CONFIG.particleCount; i++) {
+const y = Math.random() * CONFIG.treeHeight; 
+const maxRadius = (CONFIG.treeHeight - y) / CONFIG.treeHeight * CONFIG.treeRadius; 
+const angle = y * 1.5 + Math.random() * Math.PI * 2;
+const r = Math.random() * maxRadius;
+
+const x = r * Math.cos(angle);
+const z = r * Math.sin(angle);
+
+positions.push(x, y - CONFIG.treeHeight / 2, z);
+originalPositions.push(x, y - CONFIG.treeHeight / 2, z);
+
+if (Math.random() < 0.35) {
+colorHelper.setHex(CONFIG.greenPalette[Math.floor(Math.random() * CONFIG.greenPalette.length)]);
+} else {
+colorHelper.setHex(CONFIG.ornamentPalette[Math.floor(Math.random() * CONFIG.ornamentPalette.length)]);
+}
+colors.push(colorHelper.r, colorHelper.g, colorHelper.b);
+sizes.push(Math.random() * 1.0 + 0.5);
+}
+
+geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+const material = new THREE.PointsMaterial({
+size: 1.2,
+vertexColors: true,
+map: createCircleTexture(),
+transparent: true,
+alphaTest: 0.1,
+blending: THREE.AdditiveBlending,
+sizeAttenuation: true
+});
+
+treeParticles = new THREE.Points(geometry, material);
+treeParticles.userData = { originalPositions: originalPositions };
+treeGroup.add(treeParticles);
+}
+
+function createStar() {
+// 1. Create 5-Pointed Star Shape
+const starShape = new THREE.Shape();
+const points = 5;
+const outerRadius = 3;
+const innerRadius = 1.5;
+for (let i = 0; i < points * 2; i++) {
+const r = (i % 2 === 0) ? outerRadius : innerRadius;
+// Mirrored vertically
+const a = (i / (points * 2)) * Math.PI * 2 + Math.PI / 2; 
+const x = Math.cos(a) * r;
+const y = Math.sin(a) * r;
+if (i === 0) starShape.moveTo(x, y);
+else starShape.lineTo(x, y);
+}
+starShape.closePath();
+
+const extrudeSettings = {
+steps: 1,
+depth: 1,
+bevelEnabled: true,
+bevelThickness: 0.2,
+bevelSize: 0.2,
+bevelSegments: 2
+};
+
+const geometry = new THREE.ExtrudeGeometry(starShape, extrudeSettings);
+geometry.center(); 
+
+// BRIGHTER STAR MATERIAL
+const material = new THREE.MeshStandardMaterial({ 
+color: 0xffff00, 
+emissive: 0xffaa00,
+emissiveIntensity: 3.0, // Increased intensity
+metalness: 0.8,
+roughness: 0.1
+});
+
+starMesh = new THREE.Mesh(geometry, material);
+starMesh.position.set(0, CONFIG.treeHeight / 2 + 3, 0);
+// Add Main Glow
+const spriteMat = new THREE.SpriteMaterial({ 
+map: createGlowTexture(), 
+color: 0xffea00, 
+transparent: true, 
+blending: THREE.AdditiveBlending,
+opacity: 0.9 // High opacity
+});
+const glow = new THREE.Sprite(spriteMat);
+glow.scale.set(16, 16, 1);
+starMesh.add(glow);
+
+// Add Inner Hot White Glow
+const innerGlowMat = new THREE.SpriteMaterial({ 
+map: createGlowTexture(), 
+color: 0xffffff, // White hot core
+transparent: true, 
+blending: THREE.AdditiveBlending,
+opacity: 0.8
+});
+const innerGlow = new THREE.Sprite(innerGlowMat);
+innerGlow.scale.set(6, 6, 1);
+starMesh.add(innerGlow);
+
+treeGroup.add(starMesh);
+
+// 2. Add "Merry Christmas!" Text Sprite
+const textCanvas = document.createElement('canvas');
+const ctx = textCanvas.getContext('2d');
+textCanvas.width = 512;
+textCanvas.height = 128;
+// Text Style: Serif font
+ctx.font = 'bold 60px "Times New Roman", Times, serif';
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+// Gold Gradient Text
+const gradient = ctx.createLinearGradient(0, 0, 512, 0);
+gradient.addColorStop(0, '#bf953f');
+gradient.addColorStop(0.2, '#fcf6ba');
+gradient.addColorStop(0.4, '#b38728');
+gradient.addColorStop(0.6, '#fbf5b7');
+gradient.addColorStop(1, '#aa771c');
+ctx.fillStyle = gradient;
+ctx.shadowColor = "rgba(0,0,0,0.8)";
+ctx.shadowBlur = 10;
+ctx.fillText('Merry Christmas!', 256, 64);
+const textTexture = new THREE.CanvasTexture(textCanvas);
+// CUSTOM SHADER FOR LIGHT SWEEP
+textMaterial = new THREE.SpriteMaterial({ map: textTexture, transparent: true });
+// Inject Shader Code using onBeforeCompile
+textMaterial.onBeforeCompile = (shader) => {
+shader.uniforms.uTime = { value: 0 };
+textMaterial.userData.shader = shader; // Save reference to update uniform
+
+shader.fragmentShader = `
+uniform float uTime;
+` + shader.fragmentShader;
+
+// Add Shine Logic
+shader.fragmentShader = shader.fragmentShader.replace(
+'#include <map_fragment>',
+`
+#include <map_fragment>
+// Moving light bar
+float sweepPos = mod(uTime * 2.0, 3.5) - 1.0; 
+float dist = abs(vUv.x - sweepPos);
+// Narrow, bright beam
+float beam = max(0.0, 1.0 - dist * 4.0);
+beam = pow(beam, 4.0); // Sharpen the edge
+
+// Add shine to existing pixels
+if (diffuseColor.a > 0.1) {
+diffuseColor.rgb += vec3(1.0, 0.9, 0.5) * beam * 1.2;
+}
+`
+);
+};
+
+textSprite = new THREE.Sprite(textMaterial);
+// ATTACH TO STAR MESH TO FOLLOW SCALE (BREATHING)
+starMesh.add(textSprite);
+// Position relative to Star Center (Local coordinates)
+// Star is at ~3 units radius. Move text up.
+textSprite.position.set(0, 7, 0); 
+// Scale adjustment (relative to parent scale 1)
+// Original scale (36, 9) was world scale.
+// Since parent starMesh scales 0.9-1.1, we can keep base scale.
+// But starMesh geometry size is roughly 4-6 units wide.
+// If parent scale is 1, child scale is relative.
+textSprite.scale.set(36, 9, 1);
+}
+
+function createSnow() {
+snowGeometry = new THREE.BufferGeometry();
+const positions = [];
+for (let i = 0; i < CONFIG.snowCount; i++) {
+positions.push(
+(Math.random() - 0.5) * 250,
+Math.random() * 120, 
+(Math.random() - 0.5) * 250
+);
+}
+
+snowGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+const material = new THREE.PointsMaterial({
+color: 0xffffff,
+size: 0.8,
+transparent: true,
+opacity: 0.7,
+map: createCircleTexture()
+});
+
+snowSystem = new THREE.Points(snowGeometry, material);
+scene.add(snowSystem);
+}
+
+/**
+* TEXTURE HELPERS
+*/
+function createCircleTexture() {
+const canvas = document.createElement('canvas');
+canvas.width = 64; canvas.height = 64;
+const context = canvas.getContext('2d');
+context.beginPath();
+context.arc(32, 32, 30, 0, 2 * Math.PI);
+context.fillStyle = '#ffffff';
+context.fill();
+return new THREE.CanvasTexture(canvas);
+}
+
+function createGlowTexture() {
+const canvas = document.createElement('canvas');
+canvas.width = 64; canvas.height = 64;
+const context = canvas.getContext('2d');
+const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+gradient.addColorStop(0, 'rgba(255,255,255,1)');
+gradient.addColorStop(0.2, 'rgba(255,255,0,0.6)');
+gradient.addColorStop(1, 'rgba(0,0,0,0)');
+context.fillStyle = gradient;
+context.fillRect(0,0,64,64);
+return new THREE.CanvasTexture(canvas);
+}
+
+/**
+* IMAGE UPLOAD (Optimized with Golden Angle + FIXED RANGE)
+*/
+function handleImageUpload(event) {
+const files = event.target.files;
+if (!files.length) return;
+
+document.getElementById('upload-status').innerText = `${files.length} 张已选`;
+
+// Clear old
+STATE.photos.forEach(p => treeGroup.remove(p));
+STATE.photos = [];
+STATE.originalPhotoPositions = [];
+
+const count = files.length;
+const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ~2.3999 radians
+
+Array.from(files).forEach((file, index) => {
+const reader = new FileReader();
+reader.onload = function(e) {
+const img = new Image();
+img.src = e.target.result;
+img.onload = () => {
+const size = 256;
+const canvas = document.createElement('canvas');
+canvas.width = size; canvas.height = size;
+const ctx = canvas.getContext('2d');
+ctx.beginPath();
+ctx.arc(size/2, size/2, size/2 - 5, 0, Math.PI * 2);
+ctx.closePath();
+ctx.clip();
+const scale = Math.max(size/img.width, size/img.height);
+const x = (size - img.width * scale) / 2;
+const y = (size - img.height * scale) / 2;
+ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+
+ctx.strokeStyle = '#ffffff';
+ctx.lineWidth = 12;
+ctx.stroke();
+
+const texture = new THREE.CanvasTexture(canvas);
+const material = new THREE.SpriteMaterial({ map: texture });
+const sprite = new THREE.Sprite(material);
+
+// --- Golden Spiral Distribution ---
+// Range fixed to prevent clipping at top/bottom
+// t goes 0 to 1
+const t = index / count; 
+// Vertical Range: -28 (near bottom) to 15 (upper mid)
+// This avoids the very top where radius is too small
+const yPos = -28 + t * 43; 
+// Calculate Tree Radius at this local Y
+// Tree goes from -30 to +30 locally
+// Radius formula: (TreeTopY - y) / Height * MaxRadius
+const localY = yPos; 
+const treeTopY = 30; // CONFIG.treeHeight / 2
+// radius = (30 - y) / 60 * 25
+const treeRadiusAtY = ((treeTopY - localY) / CONFIG.treeHeight) * CONFIG.treeRadius;
+// Place slightly inside surface (0.85 factor)
+const r = treeRadiusAtY * 0.85; 
+// Angle based on Golden Angle
+const theta = index * goldenAngle;
+const px = r * Math.cos(theta);
+const pz = r * Math.sin(theta);
+
+sprite.position.set(px, yPos, pz);
+// Dynamic Scale: Smaller at top, larger at bottom
+// Max scale 6, min scale 3
+const heightFactor = (treeTopY - localY) / CONFIG.treeHeight; // 1 at bottom, 0 at top
+const dynamicScale = 3 + heightFactor * 3.5;
+sprite.scale.set(dynamicScale, dynamicScale, 1);
+// Store scale for animation
+sprite.userData.baseScale = new THREE.Vector3(dynamicScale, dynamicScale, 1);
+sprite.userData.originalPos = new THREE.Vector3(px, yPos, pz);
+sprite.userData.id = STATE.photos.length;
+
+treeGroup.add(sprite);
+STATE.photos.push(sprite);
+STATE.originalPhotoPositions.push(sprite.position.clone());
+};
+};
+reader.readAsDataURL(file);
+});
+}
+
+/**
+* AUDIO
+*/
+function toggleAudio() {
+const wrap = document.getElementById('audio-toggle-wrapper');
+const statusText = document.getElementById('audio-status-text');
+const btn = document.getElementById('toggle-audio');
+
+if (!STATE.audioEnabled) {
+navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+audioContext = new (window.AudioContext || window.webkitAudioContext)();
+const source = audioContext.createMediaStreamSource(stream);
+analyser = audioContext.createAnalyser();
+analyser.fftSize = 64;
+source.connect(analyser);
+dataArray = new Uint8Array(analyser.frequencyBinCount);
+STATE.audioEnabled = true;
+wrap.classList.remove('off');
+statusText.innerText = "监听中";
+statusText.className = "text-xs text-green-400";
+btn.innerText = "关闭";
+}).catch(err => {
+console.error("Mic Error:", err);
+alert("无法访问麦克风");
+});
+} else {
+if(audioContext) audioContext.close();
+STATE.audioEnabled = false;
+wrap.classList.add('off');
+statusText.innerText = "已关闭";
+statusText.className = "text-xs text-gray-400";
+btn.innerText = "开启";
+}
+}
+
+/**
+* MEDIAPIPE LOGIC
+*/
+function initMediaPipe() {
+hands = new Hands({locateFile: (file) => {
+return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+}});
+
+hands.setOptions({
+maxNumHands: 2,
+modelComplexity: 1,
+minDetectionConfidence: 0.7,
+minTrackingConfidence: 0.7
+});
+
+hands.onResults(onHandResults);
+
+btnStart.disabled = false;
+btnStart.innerText = "开始体验";
+loadingText.innerText = "模型已准备就绪";
+
+btnStart.addEventListener('click', () => {
+document.getElementById('start-overlay').style.display = 'none';
+videoElement.style.display = 'block';
+cameraUtils = new Camera(videoElement, {
+onFrame: async () => {
+await hands.send({image: videoElement});
+},
+width: 640,
+height: 480
+});
+cameraUtils.start();
+});
+}
+
+function onHandResults(results) {
+let leftLabelDetected = false;
+let rightLabelDetected = false;
+
+if (results.multiHandLandmarks) {
+for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+const landmarks = results.multiHandLandmarks[i];
+const label = results.multiHandedness[i].label; 
+if (label === 'Left') {
+leftLabelDetected = true;
+detectPhotoGesture(landmarks, 'Left'); 
+}
+
+if (label === 'Right') {
+rightLabelDetected = true;
+detectExplosionGesture(landmarks, 'Right');
+}
+}
+}
+
+// --- Reset States if hands lost ---
+if (!leftLabelDetected) {
+lhStatus.innerText = "未检测到";
+feedbackLh.classList.remove('gesture-active');
+if (STATE.wasPinching || STATE.currentPhotoIndex !== -1) {
+STATE.isPinching = false;
+STATE.wasPinching = false;
+if (!STATE.photoReturnTimer) {
+STATE.photoReturnTimer = setTimeout(returnPhotoToTree, 1200); 
+}
+}
+}
+if (!rightLabelDetected) {
+STATE.isExploded = false;
+rhStatus.innerText = "未检测到";
+feedbackRh.classList.remove('gesture-active');
+}
+}
+
+function detectExplosionGesture(landmarks, handName) {
+const wrist = landmarks[0];
+const tips = [8, 12, 16, 20];
+const mcp = [5, 9, 13, 17];
+let openFingers = 0;
+for(let i=0; i<4; i++) {
+const distTip = dist(landmarks[tips[i]], wrist);
+const distBase = dist(landmarks[mcp[i]], wrist);
+if (distTip > distBase * 1.2) openFingers++;
+}
+
+if (openFingers >= 3) {
+STATE.isExploded = true;
+rhStatus.innerText = "张开"; 
+feedbackRh.classList.add('gesture-active');
+} else {
+STATE.isExploded = false;
+rhStatus.innerText = "握拳";
+feedbackRh.classList.remove('gesture-active');
+}
+}
+
+function detectPhotoGesture(landmarks, handName) {
+const d = dist(landmarks[4], landmarks[8]);
+const isPinch = d < 0.05;
+
+STATE.isPinching = isPinch;
+
+if (isPinch) {
+lhStatus.innerText = "捏合";
+feedbackLh.classList.add('gesture-active');
+if (!STATE.wasPinching) {
+cyclePhoto();
+}
+if (STATE.photoReturnTimer) {
+clearTimeout(STATE.photoReturnTimer);
+STATE.photoReturnTimer = null;
+}
+} else {
+lhStatus.innerText = "松开";
+feedbackLh.classList.remove('gesture-active');
+if (STATE.wasPinching) {
+STATE.photoReturnTimer = setTimeout(returnPhotoToTree, 1200);
+}
+}
+STATE.wasPinching = isPinch;
+}
+
+function dist(p1, p2) {
+return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+}
+
+/**
+* ANIMATION LOGIC
+*/
+function cyclePhoto() {
+if (STATE.photos.length === 0) return;
+
+if (STATE.currentPhotoIndex !== -1 && STATE.currentPhotoIndex < STATE.photos.length) {
+const prevSprite = STATE.photos[STATE.currentPhotoIndex];
+const original = prevSprite.userData.originalPos;
+gsap.to(prevSprite.position, {
+x: original.x, y: original.y, z: original.z,
+duration: 0.5,
+ease: "power2.out"
+});
+gsap.to(prevSprite.scale, { x: 6, y: 6, duration: 0.5 });
+}
+
+STATE.currentPhotoIndex = (STATE.currentPhotoIndex + 1) % STATE.photos.length;
+const currentSprite = STATE.photos[STATE.currentPhotoIndex];
+
+scene.attach(currentSprite);
+gsap.to(currentSprite.position, {
+x: 0, y: 10, z: 80,
+duration: 0.8,
+ease: "back.out(1.2)"
+});
+gsap.to(currentSprite.scale, {
+x: 18, y: 18, 
+duration: 0.8
+});
+}
+
+function returnPhotoToTree() {
+if (STATE.currentPhotoIndex === -1) return;
+const sprite = STATE.photos[STATE.currentPhotoIndex];
+if (!sprite) return;
+
+treeGroup.attach(sprite);
+const original = sprite.userData.originalPos;
+gsap.to(sprite.position, {
+x: original.x, y: original.y, z: original.z,
+duration: 1.5,
+ease: "power2.inOut"
+});
+gsap.to(sprite.scale, { x: 6, y: 6, duration: 1.5 });
+STATE.currentPhotoIndex = -1;
+STATE.photoReturnTimer = null;
+}
+
+function animate() {
+requestAnimationFrame(animate);
+const delta = clock.getDelta();
+const time = clock.getElapsedTime();
+
+// Update Shader Uniform for Light Sweep
+if (textMaterial && textMaterial.userData.shader) {
+textMaterial.userData.shader.uniforms.uTime.value = time;
+}
+
+let beatScale = 1;
+if (STATE.audioEnabled && analyser) {
+analyser.getByteFrequencyData(dataArray);
+const avg = dataArray.reduce((a,b)=>a+b) / dataArray.length;
+STATE.audioLevel = avg;
+beatScale = 1 + (avg / 256) * 0.5;
+}
+
+if (!STATE.isExploded) {
+treeGroup.rotation.y += 0.005;
+} else {
+treeGroup.rotation.y += 0.05;
+}
+
+const positions = treeParticles.geometry.attributes.position.array;
+const original = treeParticles.userData.originalPositions;
+const targetExpansion = STATE.isExploded ? CONFIG.expansionFactor : 1.0; 
+// --- Smoothed Expansion Tracking for Star/Text Follow ---
+STATE.currentExpansion = THREE.MathUtils.lerp(STATE.currentExpansion, targetExpansion, 0.08);
+
+for(let i=0; i < CONFIG.particleCount; i++) {
+const ix = i*3;
+const audioJitter = STATE.audioEnabled ? (Math.random()-0.5) * STATE.audioLevel * 0.08 : 0;
+let expansionFactor = targetExpansion;
+if (STATE.isExploded) {
+expansionFactor += Math.sin(time * 3 + i * 0.1) * 0.5; 
+} else {
+expansionFactor *= beatScale;
+}
+positions[ix] = THREE.MathUtils.lerp(positions[ix], original[ix] * expansionFactor, 0.08);
+positions[ix+1] = THREE.MathUtils.lerp(positions[ix+1], original[ix+1] * expansionFactor + audioJitter, 0.08);
+positions[ix+2] = THREE.MathUtils.lerp(positions[ix+2], original[ix+2] * expansionFactor, 0.08);
+}
+treeParticles.geometry.attributes.position.needsUpdate = true;
+
+// Update Photos Position & Scale (Sync with expansion)
+STATE.photos.forEach(sprite => {
+if (sprite === STATE.photos[STATE.currentPhotoIndex]) return;
+
+const originalPos = sprite.userData.originalPos;
+const photoExpansion = Math.min(STATE.currentExpansion, 2.5); // Clamp so they don't fly off screen
+sprite.position.copy(originalPos).multiplyScalar(photoExpansion);
+// Scale up too
+if (sprite.userData.baseScale) {
+const scaleFactor = 1 + (photoExpansion - 1) * 0.5; 
+sprite.scale.set(
+sprite.userData.baseScale.x * scaleFactor, 
+sprite.userData.baseScale.y * scaleFactor, 
+1
+);
+}
+});
+
+// Star Scaling Animation (80% - 110%)
+if (starMesh) {
+// Sine wave from -1 to 1 -> Remap to 0.8 to 1.1
+const baseScale = 0.95 + Math.sin(time * 3) * 0.15;
+const finalScale = baseScale * beatScale; 
+starMesh.scale.set(finalScale, finalScale, finalScale);
+starMesh.rotation.y = -treeGroup.rotation.y; 
+// FOLLOW EXPANSION LOGIC
+// Original Star Y Height is roughly CONFIG.treeHeight / 2 + 3 (approx 33)
+const baseHeight = CONFIG.treeHeight / 2 + 3;
+// We apply the current expansion factor to the height so it moves up/out
+starMesh.position.y = baseHeight * STATE.currentExpansion;
+}
+
+const snowPos = snowSystem.geometry.attributes.position.array;
+for(let i=0; i<CONFIG.snowCount; i++) {
+const iy = i*3 + 1;
+snowPos[iy] -= 0.3; 
+snowPos[i*3] += Math.sin(time + i) * 0.05; 
+if (snowPos[iy] < -60) snowPos[iy] = 60;
+}
+snowSystem.geometry.attributes.position.needsUpdate = true;
+
+renderer.render(scene, camera);
+}
+
+function onWindowResize() {
+camera.aspect = window.innerWidth / window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+init();
+</script>
+</body>
+</html>
